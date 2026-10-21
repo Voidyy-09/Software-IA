@@ -1,0 +1,176 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  DISPATCHER
+  MANAGER
+  ADMIN
+}
+
+enum RoadStatus {
+  OPEN
+  CLOSED_FLOODING
+  CLOSED_DAMAGE
+  RESTRICTED
+}
+
+enum RoadClassification {
+  HIGHWAY
+  ARTERIAL
+  LOCAL
+}
+
+enum PriorityLevel {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  NEW
+  VERIFIED
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  DISPATCHED
+  EN_ROUTE
+  OFFLINE
+}
+
+model Agency {
+  id                   Int       @id @default(autoincrement())
+  name                 String
+  contactInfo          String
+  jurisdictionBoundary String
+  users                User[]
+  vehicles             Vehicle[]
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  agencyId     Int
+  agency       Agency @relation(fields: [agencyId], references: [id])
+  username     String @unique
+  passwordHash String
+  role         Role   @default(DISPATCHER)
+}
+
+model RoadSegment {
+  id              Int                @id @default(autoincrement())
+  name            String
+  classification  RoadClassification
+  geometry        String
+  defaultSpeedKmh Float
+  maxWeightKg     Float
+  maxHeightM      Float
+  isOneWay        Boolean            @default(false)
+  roadStates      RoadState[]
+}
+
+model RoadState {
+  id               Int         @id @default(autoincrement())
+  segmentId        Int
+  segment          RoadSegment @relation(fields: [segmentId], references: [id])
+  status           RoadStatus  @default(OPEN)
+  currentSpeedKmh  Float
+  restrictionNotes String?
+  floodDepthMm     Float       @default(0.0)
+  lastUpdated      DateTime    @updatedAt
+  updatedBySource  String
+}
+
+model HazardArea {
+  id            Int      @id @default(autoincrement())
+  type          String
+  severityIndex Float
+  geometry      String
+  timestamp     DateTime @default(now())
+}
+
+model IncidentReport {
+  id               Int               @id @default(autoincrement())
+  reportedLocation String
+  type             String
+  description      String
+  priority         PriorityLevel     @default(HIGH)
+  status           IncidentStatus    @default(NEW)
+  timestamp        DateTime          @default(now())
+  missions         MissionAssignment[]
+}
+
+model Vehicle {
+  id                   Int                 @id @default(autoincrement())
+  agencyId             Int
+  agency               Agency              @relation(fields: [agencyId], references: [id])
+  callSign             String
+  type                 String
+  status               VehicleStatus       @default(AVAILABLE)
+  defaultAssetLocation String
+  maxWeightKg          Float
+  maxWaterDepthMm      Float               @default(300)
+  clearanceM           Float
+  telemetry            VehicleTelemetry?
+  equipment            VehicleEquipment[]
+  missions             MissionAssignment[]
+}
+
+model VehicleTelemetry {
+  id               Int      @id @default(autoincrement())
+  vehicleId        Int      @unique
+  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id])
+  location         String
+  currentSpeedKmh  Float
+  heading          Float
+  fuelLevelPercent Float
+  lastSeen         DateTime @updatedAt
+}
+
+model EquipmentType {
+  id          Int                @id @default(autoincrement())
+  name        String
+  description String?
+  vehicles    VehicleEquipment[]
+}
+
+model VehicleEquipment {
+  vehicleId   Int
+  equipmentId Int
+  quantity    Int           @default(1)
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
+  equipment   EquipmentType @relation(fields: [equipmentId], references: [id])
+
+  @@id([vehicleId, equipmentId])
+}
+
+model MissionAssignment {
+  id                Int              @id @default(autoincrement())
+  incidentId        Int
+  incident          IncidentReport   @relation(fields: [incidentId], references: [id])
+  vehicleId         Int
+  vehicle           Vehicle          @relation(fields: [vehicleId], references: [id])
+  assignedTimestamp  DateTime         @default(now())
+  routes            GeneratedRoute[]
+}
+
+model GeneratedRoute {
+  id            Int               @id @default(autoincrement())
+  missionId     Int
+  mission       MissionAssignment @relation(fields: [missionId], references: [id])
+  pathGeometry  String
+  origin        String
+  destination   String
+  etaTimestamp  DateTime
+  status        String
+  failureReason String?
+  generatedAt   DateTime          @default(now())
+}
